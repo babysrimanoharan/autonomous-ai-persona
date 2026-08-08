@@ -38,7 +38,8 @@ MEMORY_FILE = os.path.join(DATA_DIR, "memory.json")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
-memory_lock = threading.Lock()
+# RLock prevents nested-lock problems
+memory_lock = threading.RLock()
 
 memory = {
     "agent_id": None,
@@ -49,24 +50,44 @@ memory = {
 
 
 def load_memory():
+
     global memory
+
     if not os.path.exists(MEMORY_FILE):
         return
 
     try:
-        with open(MEMORY_FILE, "r", encoding="utf-8") as file:
+
+        with open(
+            MEMORY_FILE,
+            "r",
+            encoding="utf-8"
+        ) as file:
+
             saved = json.load(file)
 
             if isinstance(saved, dict):
+
                 memory.update(saved)
 
     except Exception as error:
-        print("Memory loading error:", error)
+
+        print(
+            "Memory loading error:",
+            error
+        )
 
 
 def save_memory():
+
     with memory_lock:
-        with open(MEMORY_FILE, "w", encoding="utf-8") as file:
+
+        with open(
+            MEMORY_FILE,
+            "w",
+            encoding="utf-8"
+        ) as file:
+
             json.dump(
                 memory,
                 file,
@@ -82,18 +103,22 @@ load_memory()
 # ============================================================
 
 RSS_SOURCES = [
+
     {
         "name": "MIT Technology Review",
         "url": "https://www.technologyreview.com/feed/"
     },
+
     {
         "name": "Google AI Blog",
         "url": "https://blog.google/technology/ai/rss/"
     },
+
     {
         "name": "Hugging Face Blog",
         "url": "https://huggingface.co/blog/feed.xml"
     },
+
     {
         "name": "ArXiv AI",
         "url": "https://export.arxiv.org/rss/cs.AI"
@@ -105,6 +130,7 @@ RSS_SOURCES = [
 # ============================================================
 
 GOOD_KEYWORDS = [
+
     "ai",
     "artificial intelligence",
     "machine learning",
@@ -122,7 +148,9 @@ GOOD_KEYWORDS = [
     "deep learning"
 ]
 
+
 BAD_KEYWORDS = [
+
     "celebrity",
     "sports",
     "movie",
@@ -132,7 +160,6 @@ BAD_KEYWORDS = [
     "politics",
     "travel"
 ]
-
 
 # ============================================================
 # TOPIC DISCOVERY
@@ -145,20 +172,43 @@ def discover_topics():
     for source in RSS_SOURCES:
 
         try:
-            feed = feedparser.parse(source["url"])
+
+            print(
+                "Checking source:",
+                source["name"]
+            )
+
+            feed = feedparser.parse(
+                source["url"]
+            )
 
             for entry in feed.entries[:10]:
 
-                title = entry.get("title", "").strip()
-                summary = entry.get("summary", "").strip()
-                link = entry.get("link", "").strip()
+                title = entry.get(
+                    "title",
+                    ""
+                ).strip()
+
+                summary = entry.get(
+                    "summary",
+                    ""
+                ).strip()
+
+                link = entry.get(
+                    "link",
+                    ""
+                ).strip()
 
                 if title:
 
                     topics.append({
+
                         "title": title,
+
                         "summary": summary,
+
                         "source": source["name"],
+
                         "link": link
                     })
 
@@ -170,8 +220,12 @@ def discover_topics():
                 error
             )
 
-    return topics
+    print(
+        "Topics discovered:",
+        len(topics)
+    )
 
+    return topics
 
 # ============================================================
 # EDITORIAL JUDGMENT
@@ -180,8 +234,9 @@ def discover_topics():
 def evaluate_topic(topic):
 
     text = (
-        topic["title"] + " " +
-        topic["summary"]
+        topic.get("title", "") +
+        " " +
+        topic.get("summary", "")
     ).lower()
 
     score = 0
@@ -190,23 +245,31 @@ def evaluate_topic(topic):
     for keyword in GOOD_KEYWORDS:
 
         if keyword in text:
+
             score += 2
 
     # Negative signals
     for keyword in BAD_KEYWORDS:
 
         if keyword in text:
+
             score -= 4
 
     # Avoid repetition
-    for post in memory["published"]:
+    for post in memory.get(
+        "published",
+        []
+    ):
 
         previous_title = post.get(
             "topic",
             ""
         ).lower()
 
-        if topic["title"].lower() == previous_title:
+        if (
+            topic["title"].lower()
+            == previous_title
+        ):
 
             return (
                 False,
@@ -218,17 +281,22 @@ def evaluate_topic(topic):
     if score >= 3:
 
         return (
+
             True,
+
             score,
+
             "Selected because the topic has strong relevance to AI and technology."
         )
 
     return (
+
         False,
+
         score,
+
         "Rejected because it does not meet NOVA's editorial standards."
     )
-
 
 # ============================================================
 # CONTENT CREATION
@@ -237,59 +305,89 @@ def evaluate_topic(topic):
 def create_post(topic):
 
     return (
-        f"🔎 NOVA AI Technology Brief\n\n"
-        f"{topic['title']}\n\n"
-        f"My take: This development is worth watching because "
-        f"it reflects an important direction in AI and technology. "
-        f"I am particularly interested in its practical impact "
-        f"on developers, AI systems and real-world applications.\n\n"
-        f"NOVA's view: useful technology should move beyond hype "
-        f"and demonstrate meaningful technical or practical value."
-    )
 
+        "🔎 NOVA AI Technology Brief\n\n"
+
+        + topic["title"]
+
+        + "\n\n"
+
+        "My take: This development is worth watching "
+        "because it reflects an important direction "
+        "in AI and technology. I am particularly "
+        "interested in its practical impact on "
+        "developers, AI systems and real-world applications.\n\n"
+
+        "NOVA's view: useful technology should move "
+        "beyond hype and demonstrate meaningful "
+        "technical or practical value."
+    )
 
 # ============================================================
 # PUBLISH
 # ============================================================
 
-def publish_topic(topic, score, selection_reason):
+def publish_topic(
+    topic,
+    score,
+    selection_reason
+):
 
     created_at = datetime.now(
         timezone.utc
-    ).isoformat().replace("+00:00", "Z")
+    ).isoformat().replace(
+        "+00:00",
+        "Z"
+    )
 
     post = {
 
-        "id": "p-" + uuid.uuid4().hex[:10],
+        "id":
+            "p-" +
+            uuid.uuid4().hex[:10],
 
-        "createdAt": created_at,
+        "createdAt":
+            created_at,
 
-        "text": create_post(topic),
+        "text":
+            create_post(topic),
 
-        "rationale": (
-            f"{selection_reason} "
-            f"The topic is relevant now because it was discovered "
-            f"from a live information source during the autonomous "
-            f"discovery cycle. NOVA selected it over lower-scoring "
-            f"candidates because its editorial score was {score}."
-        ),
+        "rationale":
+
+            selection_reason +
+            " The topic is relevant now because it "
+            "was discovered from a live information "
+            "source during the autonomous discovery "
+            "cycle. NOVA selected it over lower-scoring "
+            "candidates because its editorial score "
+            f"was {score}.",
 
         "sources": [
-            topic["link"]
+
+            topic.get(
+                "link",
+                ""
+            )
         ],
 
-        # Internal fields used for memory
-        "topic": topic["title"],
-        "source_name": topic["source"]
+        # Internal memory fields
+        "topic":
+            topic["title"],
+
+        "source_name":
+            topic["source"]
     }
 
+    # Only modify memory inside lock
     with memory_lock:
 
-        memory["published"].append(post)
+        memory.setdefault(
+            "published",
+            []
+        ).append(post)
 
-        # Keep previously published posts available.
-        # We don't delete old posts.
-        save_memory()
+    # Save AFTER releasing the lock
+    save_memory()
 
     print(
         "Published:",
@@ -298,14 +396,15 @@ def publish_topic(topic, score, selection_reason):
 
     return post
 
-
 # ============================================================
 # AUTONOMOUS AGENT
 # ============================================================
 
 def autonomous_cycle():
 
-    print("NOVA autonomous agent started.")
+    print(
+        "NOVA autonomous agent started."
+    )
 
     # Small delay after initialization
     time.sleep(10)
@@ -324,8 +423,8 @@ def autonomous_cycle():
 
             for topic in topics:
 
-                should_publish, score, reason = evaluate_topic(
-                    topic
+                should_publish, score, reason = (
+                    evaluate_topic(topic)
                 )
 
                 if should_publish:
@@ -345,20 +444,28 @@ def autonomous_cycle():
 
                     rejected_item = {
 
-                        "topic": topic["title"],
+                        "topic":
+                            topic["title"],
 
-                        "reason": reason,
+                        "reason":
+                            reason,
 
-                        "checkedAt": datetime.now(
-                            timezone.utc
-                        ).isoformat().replace(
-                            "+00:00",
-                            "Z"
-                        )
+                        "checkedAt":
+
+                            datetime.now(
+                                timezone.utc
+                            ).isoformat().replace(
+                                "+00:00",
+                                "Z"
+                            )
                     }
 
                     with memory_lock:
-                        memory["rejected"].append(
+
+                        memory.setdefault(
+                            "rejected",
+                            []
+                        ).append(
                             rejected_item
                         )
 
@@ -377,10 +484,10 @@ def autonomous_cycle():
                 error
             )
 
-        # Autonomous publishing interval.
-        # The agent continues without another human request.
-        time.sleep(30 * 60)
-
+        # Run again after 30 minutes
+        time.sleep(
+            30 * 60
+        )
 
 # ============================================================
 # INITIALIZE AGENT
@@ -394,12 +501,16 @@ def initialize_agent():
 
     global memory
 
-    # Initialization is allowed exactly once
+    # Initialization allowed exactly once
     if memory.get("initialized"):
 
         return jsonify({
-            "error": "Agent has already been initialized.",
-            "agentId": memory.get("agent_id")
+
+            "error":
+                "Agent has already been initialized.",
+
+            "agentId":
+                memory.get("agent_id")
         }), 409
 
     data = request.get_json(
@@ -411,26 +522,35 @@ def initialize_agent():
         {}
     )
 
-    # Use supplied persona information if provided
+    # Use supplied persona information
     if requested_persona.get("name"):
 
-        PERSONA["name"] = requested_persona["name"]
+        PERSONA["name"] = (
+            requested_persona["name"]
+        )
 
     if requested_persona.get("domain"):
 
-        PERSONA["domain"] = requested_persona["domain"]
+        PERSONA["domain"] = (
+            requested_persona["domain"]
+        )
 
     # Generate unique agent ID
-    agent_id = "agent-" + uuid.uuid4().hex[:12]
+    agent_id = (
+        "agent-" +
+        uuid.uuid4().hex[:12]
+    )
 
     memory["agent_id"] = agent_id
     memory["initialized"] = True
 
     save_memory()
 
-    # Start autonomous operation AFTER initialization
+    # Start autonomous operation
     agent_thread = threading.Thread(
+
         target=autonomous_cycle,
+
         daemon=True
     )
 
@@ -442,9 +562,10 @@ def initialize_agent():
     )
 
     return jsonify({
-        "agentId": agent_id
-    })
 
+        "agentId":
+            agent_id
+    })
 
 # ============================================================
 # FEED
@@ -463,47 +584,97 @@ def get_feed():
     if not agent_id:
 
         return jsonify({
+
             "posts": []
         })
 
-    if agent_id != memory.get("agent_id"):
+    if (
+        agent_id
+        != memory.get("agent_id")
+    ):
 
         return jsonify({
+
             "posts": []
         })
 
-    # Newest first
-    posts = sorted(
-        memory["published"],
-        key=lambda post: post["createdAt"],
-        reverse=True
+    # Get published posts safely
+    posts = memory.get(
+        "published",
+        []
     )
 
-    # Return only fields required by evaluator
-    clean_posts = []
+    # Ignore malformed old records
+    valid_posts = []
 
     for post in posts:
 
+        if isinstance(post, dict):
+
+            if post.get("createdAt"):
+
+                valid_posts.append(post)
+
+    # Newest first
+    valid_posts = sorted(
+
+        valid_posts,
+
+        key=lambda post:
+            post.get(
+                "createdAt",
+                ""
+            ),
+
+        reverse=True
+    )
+
+    # Return evaluator fields
+    clean_posts = []
+
+    for post in valid_posts:
+
         clean_posts.append({
 
-            "id": post["id"],
+            "id":
+                post.get(
+                    "id",
+                    ""
+                ),
 
-            "createdAt": post["createdAt"],
+            "createdAt":
+                post.get(
+                    "createdAt",
+                    ""
+                ),
 
-            "text": post["text"],
+            "text":
+                post.get(
+                    "text",
+                    ""
+                ),
 
-            "rationale": post["rationale"],
+            "rationale":
+                post.get(
+                    "rationale",
+                    ""
+                ),
 
-            "sources": post["sources"]
+            "sources":
+                post.get(
+                    "sources",
+                    []
+                )
         })
 
     return jsonify({
-        "posts": clean_posts
+
+        "posts":
+            clean_posts
     })
 
-
 # ============================================================
-# OPTIONAL STATUS ENDPOINT
+# STATUS
 # ============================================================
 
 @app.route(
@@ -514,25 +685,72 @@ def status():
 
     return jsonify({
 
-        "status": "running",
+        "status":
+            "running",
 
-        "initialized": memory["initialized"],
+        "initialized":
+            memory.get(
+                "initialized",
+                False
+            ),
 
-        "agentId": memory["agent_id"],
+        "agentId":
+            memory.get(
+                "agent_id"
+            ),
 
-        "persona": PERSONA["name"],
+        "persona":
+            PERSONA["name"],
 
-        "publishedPosts": len(
-            memory["published"]
-        ),
+        "publishedPosts":
+            len(
+                memory.get(
+                    "published",
+                    []
+                )
+            ),
 
-        "rejectedTopics": len(
-            memory["rejected"]
-        ),
+        "rejectedTopics":
+            len(
+                memory.get(
+                    "rejected",
+                    []
+                )
+            ),
 
-        "autonomous": True
+        "autonomous":
+            True
     })
 
+# ============================================================
+# HOME
+# ============================================================
+
+@app.route("/")
+def home():
+
+    return (
+        "NOVA is running successfully!"
+    )
+
+# ============================================================
+# START AUTONOMOUS AGENT AFTER SERVER RESTART
+# ============================================================
+
+if memory.get("initialized"):
+
+    print(
+        "Existing NOVA agent detected."
+    )
+
+    agent_thread = threading.Thread(
+
+        target=autonomous_cycle,
+
+        daemon=True
+    )
+
+    agent_thread.start()
 
 # ============================================================
 # START SERVER
@@ -540,14 +758,15 @@ def status():
 
 if __name__ == "__main__":
 
-    print("NOVA server starting...")
-
-    @app.route("/")
-    def home():
-        return "NOVA is running successfully!"
+    print(
+        "NOVA server starting..."
+    )
 
     app.run(
+
         host="0.0.0.0",
+
         port=5000,
+
         debug=False
     )
