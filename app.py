@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, render_template,request
 import feedparser
 import json
 import os
@@ -8,7 +8,9 @@ import uuid
 from datetime import datetime, timezone
 
 app = Flask(__name__)
-
+@app.route("/dashboard")
+def dashboard():
+    return render_template("dashboard.html")
 # ============================================================
 # PERSONA
 # ============================================================
