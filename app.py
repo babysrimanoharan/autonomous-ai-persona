@@ -486,9 +486,9 @@ def autonomous_cycle():
                 error
             )
 
-        # Run again after 30 minutes
+        # Run again after 5 minutes
         time.sleep(
-            30 * 60
+            5* 60
         )
 
 # ============================================================
